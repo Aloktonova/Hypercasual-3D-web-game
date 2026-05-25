@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Bridge Stack Rush</title>
+  <style>
+    :root {
+      --ui-bg: rgba(0, 0, 0, 0.62);
+      --accent: #32d3ff;
+      --danger: #ff4d6d;
+      --ok: #39d98a;
+      --text: #ffffff;
+      --font: "Segoe UI", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font);
+      color: var(--text);
+      background: #000;
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: none;
+    }
+
+    #gameContainer {
+      position: fixed;
+      inset: 0;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+
+    .screen {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      background: linear-gradient(to bottom, rgba(9, 18, 35, 0.78), rgba(0, 0, 0, 0.88));
+      z-index: 20;
+      text-align: center;
+      padding: 24px;
+    }
+
+    .screen.active { display: flex; }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 5vw, 3rem);
+      letter-spacing: 1px;
+      text-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    }
+
+    p {
+      margin: 8px 0;
+      font-size: clamp(1rem, 3vw, 1.2rem);
+    }
+
+    .btn {
+      margin-top: 18px;
+      border: none;
+      border-radius: 999px;
+      background: linear-gradient(120deg, #36e4ff, #4b78ff);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 700;
+      padding: 12px 28px;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(52, 149, 255, 0.35);
+      touch-action: manipulation;
+    }
+
+    #hud {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 10px 12px;
+      z-index: 15;
+      pointer-events: none;
+      display: none;
+    }
+
+    #hud.active { display: block; }
+
+    .hud-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .chip {
+      background: var(--ui-bg);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      padding: 8px 14px;
+      min-width: 90px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 0.95rem;
+      backdrop-filter: blur(2px);
+    }
+
+    #progressBar {
+      flex: 1;
+      height: 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.16);
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    #progressFill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--ok), var(--accent));
+      transition: width 0.15s linear;
+    }
+
+    #joystick {
+      position: fixed;
+      left: 20px;
+      bottom: 22px;
+      width: 132px;
+      height: 132px;
+      z-index: 16;
+      display: none;
+      pointer-events: auto;
+    }
+
+    #joystick.active { display: block; }
+
+    #joystickBase {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.16);
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.35);
+    }
+
+    #joystickHandle {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      left: 36px;
+      top: 36px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 5px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .result-title { font-size: clamp(2rem, 6vw, 3.4rem); }
+    .win { color: #7fffb7; }
+    .lose { color: #ff7f95; }
+
+    @media (max-width: 640px) {
+      #joystick {
+        width: 116px;
+        height: 116px;
+      }
+      #joystickHandle {
+        width: 52px;
+        height: 52px;
+        left: 32px;
+        top: 32px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer"></div>
+
+  <div id="hud" aria-live="polite">
+    <div class="hud-row">
+      <div id="coinHud" class="chip">🪙 0</div>
+      <div id="progressBar"><div id="progressFill"></div></div>
+      <div id="stackHud" class="chip">🧱 0</div>
+    </div>
+  </div>
+
+  <div id="startScreen" class="screen active">
+    <h1>Bridge Stack Rush</h1>
+    <p>Build your stairs before the bots do.</p>
+    <p id="startCoins">Coins: 0</p>
+    <button id="playBtn" class="btn">Play</button>
+  </div>
+
+  <div id="winScreen" class="screen">
+    <h1 class="result-title win">LEVEL COMPLETE</h1>
+    <p id="winCoins">+0 coins</p>
+    <button id="nextBtn" class="btn">Next Level</button>
+  </div>
+
+  <div id="loseScreen" class="screen">
+    <h1 class="result-title lose">TRY AGAIN</h1>
+    <p>One of the bots reached the finish.</p>
+    <button id="retryBtn" class="btn">Retry</button>
+  </div>
+
+  <div id="joystick">
+    <div id="joystickBase"></div>
+    <div id="joystickHandle"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" onerror="(function(){var s=document.createElement('script');s.src='https://unpkg.com/three@0.128.0/build/three.min.js';document.head.appendChild(s);}())"></script>
+  <script>
+    (function boot() {
+      if (!window.THREE) {
+        setTimeout(boot, 50);
+        return;
+      }
+    const GAME_STATES = {
+      READY: "READY",
+      RUNNING: "RUNNING",
+      WIN: "WIN",
+      LOSE: "LOSE"
+    };
+
+    const levels = [
+      {
+        id: 1,
+        aiCount: 3,
+        aiSpeed: 1.0,
+        tileCount: 50,
+        colors: [0xff5a5a, 0x32d3ff, 0xffc857, 0x39d98a],
+        stairs: {
+          stepCount: 20,
+          stepSize: { w: 1.1, h: 0.42, d: 1.0 },
+          start: new THREE.Vector3(0, 0.2, 5.4),
+          direction: new THREE.Vector3(0, 0.42, 0.86)
+        },
+        finishPosition: new THREE.Vector3(0, 8.9, 23)
+      },
+      {
+        id: 2,
+        aiCount: 3,
+        aiSpeed: 1.1,
+        tileCount: 64,
+        colors: [0xff7f50, 0x5adf5a, 0x6597ff, 0xe866ff],
+        stairs: {
+          stepCount: 20,
+          stepSize: { w: 1.1, h: 0.44, d: 1.0 },
+          start: new THREE.Vector3(0, 0.2, 5.8),
+          direction: new THREE.Vector3(0, 0.44, 0.9)
+        },
+        finishPosition: new THREE.Vector3(0, 9.4, 24)
+      }
+    ];
+
+    class SoundManager {
+      constructor() {
+        this.ctx = null;
+        this.master = null;
+        this.droneOsc = null;
+      }
+
+      init() {
+        if (this.ctx) return;
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = 0.14;
+        this.master.connect(this.ctx.destination);
+      }
+
+      ensureRunning() {
+        if (!this.ctx) this.init();
+        if (this.ctx.state === "suspended") this.ctx.resume();
+      }
+
+      beep(freq, duration, type = "sine", volume = 0.6, timeOffset = 0) {
+        this.ensureRunning();
+        const now = this.ctx.currentTime + timeOffset;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, now);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(volume, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+        osc.connect(gain);
+        gain.connect(this.master);
+        osc.start(now);
+        osc.stop(now + duration + 0.02);
+      }
+
+      startDrone() {
+        this.ensureRunning();
+        if (this.droneOsc) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.value = 82;
+        gain.gain.value = 0.03;
+        osc.connect(gain);
+        gain.connect(this.master);
+        osc.start();
+        this.droneOsc = osc;
+      }
+
+      stopDrone() {
+        if (this.droneOsc) {
+          this.droneOsc.stop();
+          this.droneOsc.disconnect();
+          this.droneOsc = null;
+        }
+      }
+
+      play(type) {
+        switch (type) {
+          case "collect":
+            this.beep(800, 0.1, "square", 0.2);
+            break;
+          case "place":
+            this.beep(200, 0.15, "sine", 0.35);
+            break;
+          case "button":
+            this.beep(520, 0.08, "triangle", 0.25);
+            break;
+          case "win":
+            [660, 820, 980, 1320].forEach((f, i) => this.beep(f, 0.12, "sine", 0.32, i * 0.09));
+            break;
+          default:
+            break;
+        }
+      }
+    }
+
+    class ParticleSystem {
+      constructor(scene) {
+        this.scene = scene;
+        this.pool = [];
+        this.active = [];
+        this.maxParticles = 180;
+      }
+
+      createParticle() {
+        const geometry = new THREE.PlaneGeometry(0.16, 0.16);
+        const material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.visible = false;
+        this.scene.add(mesh);
+        return {
+          mesh,
+          velocity: new THREE.Vector3(),
+          life: 0,
+          maxLife: 0,
+          spin: 0,
+          gravity: 0
+        };
+      }
+
+      getParticle() {
+        if (this.pool.length) return this.pool.pop();
+        if (this.active.length + this.pool.length < this.maxParticles) return this.createParticle();
+        return null;
+      }
+
+      emit(type, position, color = 0xffffff) {
+        const cfg = {
+          pickup: { count: 8, speed: 3.2, life: 0.45, gravity: 6 },
+          place: { count: 6, speed: 1.8, life: 0.4, gravity: 3.5 },
+          win: { count: 50, speed: 4.1, life: 2.0, gravity: 1.1 }
+        }[type] || { count: 5, speed: 2, life: 0.5, gravity: 4 };
+
+        for (let i = 0; i < cfg.count; i++) {
+          const p = this.getParticle();
+          if (!p) break;
+          p.mesh.visible = true;
+          p.mesh.material.color.setHex(type === "win" ? [0xff5a5a, 0x5adf5a, 0x6597ff, 0xffd166, 0xe866ff][i % 5] : color);
+          p.mesh.material.opacity = 0.95;
+          p.mesh.position.copy(position);
+          p.mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+          p.mesh.scale.setScalar(type === "win" ? 0.2 : 0.12);
+          const dir = new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 1.2 + 0.35, (Math.random() - 0.5) * 2).normalize();
+          p.velocity.copy(dir.multiplyScalar(cfg.speed * (0.6 + Math.random() * 0.8)));
+          p.life = cfg.life;
+          p.maxLife = cfg.life;
+          p.spin = (Math.random() - 0.5) * 8;
+          p.gravity = cfg.gravity;
+          this.active.push(p);
+        }
+      }
+
+      update(delta) {
+        for (let i = this.active.length - 1; i >= 0; i--) {
+          const p = this.active[i];
+          p.life -= delta;
+          if (p.life <= 0) {
+            p.mesh.visible = false;
+            this.active.splice(i, 1);
+            this.pool.push(p);
+            continue;
+          }
+          p.velocity.y -= p.gravity * delta;
+          p.mesh.position.addScaledVector(p.velocity, delta);
+          p.mesh.rotation.x += p.spin * delta;
+          p.mesh.rotation.y += p.spin * 0.6 * delta;
+          const t = p.life / p.maxLife;
+          p.mesh.material.opacity = t;
+          p.mesh.scale.setScalar(0.02 + t * 0.22);
+        }
+      }
+
+      dispose() {
+        [...this.pool, ...this.active].forEach((p) => {
+          p.mesh.geometry.dispose();
+          p.mesh.material.dispose();
+          this.scene.remove(p.mesh);
+        });
+        this.pool.length = 0;
+        this.active.length = 0;
+      }
+    }
+
+    class Tile extends THREE.Mesh {
+      constructor(color, basePosition) {
+        super(
+          new THREE.BoxGeometry(0.8, 0.8, 0.8),
+          new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.2 })
+        );
+        this.base = basePosition.clone();
+        this.colorHex = color;
+        this.offset = Math.random() * Math.PI * 2;
+        this.collected = false;
+        this.collectAnim = 0;
+        this.castShadow = true;
+        this.receiveShadow = true;
+        this.position.copy(this.base);
+      }
+
+      animate(time) {
+        if (this.collected) {
+          this.collectAnim += 0.12;
+          const s = Math.max(0, 1 - this.collectAnim);
+          this.scale.setScalar(s);
+          if (s <= 0.001) this.visible = false;
+          return;
+        }
+        this.position.set(this.base.x, this.base.y + Math.sin(time * 2 + this.offset) * 0.1, this.base.z);
+        this.rotation.y += 0.018;
+      }
+
+      collect() {
+        this.collected = true;
+        this.collectAnim = 0;
+      }
+
+      reset(position, color) {
+        this.base.copy(position);
+        this.position.copy(position);
+        this.material.color.setHex(color);
+        this.material.emissive.setHex(color);
+        this.colorHex = color;
+        this.collected = false;
+        this.collectAnim = 0;
+        this.visible = true;
+        this.scale.set(1, 1, 1);
+      }
+    }
+
+    class Stair extends THREE.Group {
+      constructor(ownerColor, config) {
+        super();
+        this.ownerColor = ownerColor;
+        this.stepCount = config.stepCount;
+        this.stepSize = config.stepSize;
+        this.stepPositions = [];
+        this.steps = [];
+        for (let i = 0; i < config.stepCount; i++) {
+          const pos = config.start.clone().add(config.direction.clone().multiplyScalar(i));
+          this.stepPositions.push(pos);
+          const step = new THREE.Mesh(
+            new THREE.BoxGeometry(this.stepSize.w, this.stepSize.h, this.stepSize.d),
+            new THREE.MeshStandardMaterial({ color: ownerColor, roughness: 0.6, metalness: 0.1 })
+          );
+          step.position.copy(pos);
+          step.scale.set(1, 0.001, 1);
+          step.visible = false;
+          step.castShadow = true;
+          step.receiveShadow = true;
+          this.add(step);
+          this.steps.push({ mesh: step, filled: false, anim: 0 });
+        }
+      }
+
+      getNextSlot() {
+        return this.steps.find((s) => !s.filled) || null;
+      }
+
+      placePiece() {
+        const slot = this.getNextSlot();
+        if (!slot) return null;
+        slot.filled = true;
+        slot.anim = 0;
+        slot.mesh.visible = true;
+        slot.mesh.scale.y = 0.001;
+        return slot.mesh.position.clone();
+      }
+
+      isComplete() {
+        return this.steps.every((s) => s.filled);
+      }
+
+      update(delta) {
+        for (const slot of this.steps) {
+          if (slot.filled && slot.mesh.scale.y < 1) {
+            slot.anim += delta * 6;
+            slot.mesh.scale.y = Math.min(1, slot.anim);
+          }
+        }
+      }
+
+      getBuildTarget() {
+        const index = this.steps.findIndex((s) => !s.filled);
+        if (index === -1) return this.stepPositions[this.stepPositions.length - 1];
+        const p = this.stepPositions[index];
+        return new THREE.Vector3(p.x, 0.5, p.z - 0.2);
+      }
+
+      dispose() {
+        this.steps.forEach((s) => {
+          s.mesh.geometry.dispose();
+          s.mesh.material.dispose();
+        });
+      }
+    }
+
+    class Player extends THREE.Group {
+      constructor(color, name = "Player") {
+        super();
+        this.name = name;
+        this.speed = 4;
+        this.velocity = new THREE.Vector3();
+        this.moveDirection = new THREE.Vector3();
+        this.stack = [];
+        this.maxStack = 18;
+        this.radius = 0.52;
+        this.colorHex = color;
+        this.coins = 0;
+
+        this.bodyMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.16 });
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 1.05, 12), this.bodyMat);
+        body.position.y = 0.55;
+        body.castShadow = true;
+
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 12), new THREE.MeshStandardMaterial({ color: 0xfff4d9 }));
+        head.position.y = 1.25;
+        head.castShadow = true;
+
+        this.add(body);
+        this.add(head);
+      }
+
+      setColor(color) {
+        this.colorHex = color;
+        this.bodyMat.color.setHex(color);
+        this.bodyMat.emissive.setHex(color);
+      }
+
+      setDirection(dir) {
+        this.moveDirection.copy(dir);
+      }
+
+      update(delta, arena) {
+        this.velocity.copy(this.moveDirection).multiplyScalar(this.speed);
+        this.position.addScaledVector(this.velocity, delta);
+        this.position.x = THREE.MathUtils.clamp(this.position.x, -arena, arena);
+        this.position.z = THREE.MathUtils.clamp(this.position.z, -arena, arena);
+
+        if (this.moveDirection.lengthSq() > 0.01) {
+          const targetYaw = Math.atan2(this.moveDirection.x, this.moveDirection.z);
+          this.rotation.y = THREE.MathUtils.lerp(this.rotation.y, targetYaw, 0.18);
+        }
+
+        for (let i = 0; i < this.stack.length; i++) {
+          const block = this.stack[i];
+          const targetPos = new THREE.Vector3(0, 0.3 + i * 0.22, -0.65 - i * 0.06);
+          block.position.lerp(targetPos, 0.25);
+        }
+      }
+
+      addBlock() {
+        if (this.stack.length >= this.maxStack) return false;
+        const block = new THREE.Mesh(
+          new THREE.BoxGeometry(0.42, 0.2, 0.42),
+          new THREE.MeshStandardMaterial({ color: this.colorHex, emissive: this.colorHex, emissiveIntensity: 0.16 })
+        );
+        block.castShadow = true;
+        block.receiveShadow = true;
+        this.add(block);
+        this.stack.push(block);
+        return true;
+      }
+
+      removeBlock() {
+        const block = this.stack.pop();
+        if (!block) return false;
+        block.geometry.dispose();
+        block.material.dispose();
+        this.remove(block);
+        return true;
+      }
+
+      getStackCount() {
+        return this.stack.length;
+      }
+
+      canBuild() {
+        return this.stack.length > 0;
+      }
+
+      collect(tile, particleSystem, soundManager) {
+        if (!tile || tile.collected || tile.colorHex !== this.colorHex) return false;
+        tile.collect();
+        if (this.addBlock()) {
+          particleSystem.emit("pickup", tile.position, this.colorHex);
+          if (soundManager) soundManager.play("collect");
+          this.coins += 1;
+          return true;
+        }
+        return false;
+      }
+    }
+
+    class AI extends Player {
+      constructor(color, speedVariance = 1, name = "AI") {
+        super(color, name);
+        this.baseSpeed = 3.2 * speedVariance;
+        this.speed = this.baseSpeed;
+        this.state = "FIND_TILE";
+        this.target = null;
+      }
+
+      findNearestTile(tiles) {
+        let best = null;
+        let bestDist = Infinity;
+        for (const tile of tiles) {
+          if (tile.collected || !tile.visible || tile.colorHex !== this.colorHex) continue;
+          const d = this.position.distanceToSquared(tile.position);
+          if (d < bestDist) {
+            bestDist = d;
+            best = tile;
+          }
+        }
+        return best;
+      }
+
+      updateAI(delta, game) {
+        const stair = game.stairs.get(this.colorHex);
+        if (!stair) return;
+
+        switch (this.state) {
+          case "FIND_TILE":
+            this.target = this.findNearestTile(game.tiles);
+            this.state = this.target ? "COLLECT" : "FIND_STAIR";
+            break;
+          case "COLLECT":
+            if (!this.target || this.target.collected || !this.target.visible) {
+              this.state = "FIND_TILE";
+              break;
+            }
+            this.moveToward(this.target.position);
+            if (this.position.distanceTo(this.target.position) < 0.95) {
+              this.collect(this.target, game.particles, null);
+              this.state = this.getStackCount() >= 3 ? "FIND_STAIR" : "FIND_TILE";
+            }
+            break;
+          case "FIND_STAIR": {
+            const buildTarget = stair.getBuildTarget();
+            this.moveToward(buildTarget);
+            if (this.position.distanceTo(buildTarget) < 1.0) {
+              this.state = this.canBuild() ? "BUILD" : "FIND_TILE";
+            }
+            break;
+          }
+          case "BUILD": {
+            if (!this.canBuild()) {
+              this.state = "FIND_TILE";
+              break;
+            }
+            const placedPos = stair.placePiece();
+            if (placedPos) {
+              this.removeBlock();
+              game.particles.emit("place", placedPos, this.colorHex);
+              game.sound.play("place");
+            }
+            if (stair.isComplete()) {
+              this.state = "FINISH";
+            } else {
+              this.state = this.canBuild() ? "FIND_STAIR" : "FIND_TILE";
+            }
+            break;
+          }
+          case "FINISH":
+            this.moveToward(game.currentLevel.finishPosition);
+            break;
+          default:
+            this.state = "FIND_TILE";
+            break;
+        }
+
+        super.update(delta, game.arenaLimit);
+      }
+
+      moveToward(target) {
+        const dir = target.clone().sub(this.position);
+        dir.y = 0;
+        if (dir.lengthSq() > 0.0001) dir.normalize();
+        this.setDirection(dir);
+        this.speed = this.baseSpeed;
+      }
+    }
+
+    class InputManager {
+      constructor(dom) {
+        this.dom = dom;
+        this.base = document.getElementById("joystickBase");
+        this.handle = document.getElementById("joystickHandle");
+        this.joystick = document.getElementById("joystick");
+        this.dir = new THREE.Vector2();
+        this.active = false;
+        this.radius = 42;
+        this.handleHome = { x: 36, y: 36 };
+        this.handleMobileResize();
+        this.setupJoystick();
+      }
+
+      handleMobileResize() {
+        const small = window.innerWidth <= 640;
+        this.radius = small ? 36 : 42;
+        this.handleHome = small ? { x: 32, y: 32 } : { x: 36, y: 36 };
+        this.reset();
+      }
+
+      setupJoystick() {
+        const move = (touch) => {
+          const rect = this.joystick.getBoundingClientRect();
+          let x = touch.clientX - rect.left - rect.width / 2;
+          let y = touch.clientY - rect.top - rect.height / 2;
+          const len = Math.hypot(x, y);
+          if (len > this.radius) {
+            x = (x / len) * this.radius;
+            y = (y / len) * this.radius;
+          }
+          this.handle.style.left = `${this.handleHome.x + x}px`;
+          this.handle.style.top = `${this.handleHome.y + y}px`;
+          this.dir.set(x / this.radius, y / this.radius);
+        };
+
+        this.joystick.addEventListener("touchstart", (e) => {
+          this.active = true;
+          e.preventDefault();
+          move(e.touches[0]);
+        }, { passive: false });
+
+        this.joystick.addEventListener("touchmove", (e) => {
+          if (!this.active) return;
+          e.preventDefault();
+          move(e.touches[0]);
+        }, { passive: false });
+
+        const stop = (e) => {
+          if (e) e.preventDefault();
+          this.active = false;
+          this.reset();
+        };
+
+        this.joystick.addEventListener("touchend", stop, { passive: false });
+        this.joystick.addEventListener("touchcancel", stop, { passive: false });
+
+        window.addEventListener("keydown", (e) => {
+          if (e.key === "ArrowUp" || e.key.toLowerCase() === "w") this.dir.y = -1;
+          if (e.key === "ArrowDown" || e.key.toLowerCase() === "s") this.dir.y = 1;
+          if (e.key === "ArrowLeft" || e.key.toLowerCase() === "a") this.dir.x = -1;
+          if (e.key === "ArrowRight" || e.key.toLowerCase() === "d") this.dir.x = 1;
+        });
+        window.addEventListener("keyup", (e) => {
+          if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d", "W", "A", "S", "D"].includes(e.key)) {
+            this.dir.set(0, 0);
+          }
+        });
+      }
+
+      getDirection() {
+        const v = new THREE.Vector3(this.dir.x, 0, this.dir.y * -1);
+        if (v.lengthSq() > 1) v.normalize();
+        return v;
+      }
+
+      reset() {
+        this.dir.set(0, 0);
+        this.handle.style.left = `${this.handleHome.x}px`;
+        this.handle.style.top = `${this.handleHome.y}px`;
+      }
+
+      setEnabled(enabled) {
+        this.joystick.classList.toggle("active", enabled);
+      }
+    }
+
+    class UIManager {
+      constructor() {
+        this.screens = {
+          start: document.getElementById("startScreen"),
+          win: document.getElementById("winScreen"),
+          lose: document.getElementById("loseScreen")
+        };
+        this.hud = document.getElementById("hud");
+        this.progressFill = document.getElementById("progressFill");
+        this.coinHud = document.getElementById("coinHud");
+        this.stackHud = document.getElementById("stackHud");
+        this.startCoins = document.getElementById("startCoins");
+        this.winCoins = document.getElementById("winCoins");
+      }
+
+      showScreen(name) {
+        Object.entries(this.screens).forEach(([k, el]) => el.classList.toggle("active", k === name));
+      }
+
+      setHudVisible(show) {
+        this.hud.classList.toggle("active", show);
+      }
+
+      updateProgress(v) {
+        const pct = THREE.MathUtils.clamp(v, 0, 1) * 100;
+        this.progressFill.style.width = `${pct}%`;
+      }
+
+      updateCoins(value) {
+        this.coinHud.textContent = `🪙 ${value}`;
+        this.startCoins.textContent = `Coins: ${value}`;
+      }
+
+      updateStack(value) {
+        this.stackHud.textContent = `🧱 ${value}`;
+      }
+
+      showWin(coinsEarned) {
+        this.winCoins.textContent = `+${coinsEarned} coins`;
+        this.showScreen("win");
+      }
+    }
+
+    class Game {
+      constructor(container) {
+        this.container = container;
+        this.state = GAME_STATES.READY;
+        this.levelIndex = Number(localStorage.getItem("bridge_level")) || 0;
+        this.coins = Number(localStorage.getItem("bridge_coins")) || 0;
+        this.clock = new THREE.Clock();
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0x87ceeb);
+        this.arenaLimit = 9.5;
+
+        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.shadowMap.enabled = true;
+        this.container.appendChild(this.renderer.domElement);
+
+        this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.camera.position.set(0, 12, -10);
+        this.camera.lookAt(0, 0, 0);
+
+        this.sound = new SoundManager();
+        this.ui = new UIManager();
+        this.input = new InputManager(this.renderer.domElement);
+        this.particles = new ParticleSystem(this.scene);
+
+        this.players = [];
+        this.aiBots = [];
+        this.tiles = [];
+        this.tilePool = [];
+        this.stairs = new Map();
+        this.currentLevel = levels[this.levelIndex % levels.length];
+
+        this.setupScene();
+        this.setupUIActions();
+        this.buildLevel(this.currentLevel);
+        this.ui.updateCoins(this.coins);
+
+        this.renderer.domElement.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+        window.addEventListener("resize", () => this.onResize());
+      }
+
+      setupScene() {
+        const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+        this.scene.add(ambient);
+
+        const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+        sun.position.set(8, 18, -10);
+        sun.castShadow = true;
+        sun.shadow.mapSize.set(1024, 1024);
+        sun.shadow.camera.near = 0.5;
+        sun.shadow.camera.far = 60;
+        sun.shadow.camera.left = -20;
+        sun.shadow.camera.right = 20;
+        sun.shadow.camera.top = 20;
+        sun.shadow.camera.bottom = -20;
+        this.scene.add(sun);
+
+        const ground = new THREE.Mesh(
+          new THREE.PlaneGeometry(20, 20),
+          new THREE.MeshStandardMaterial({ color: 0x5cb85c, roughness: 0.9 })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        this.scene.add(ground);
+
+        const waterMat = new THREE.MeshStandardMaterial({ color: 0x2f6dff, transparent: true, opacity: 0.45, roughness: 0.2, metalness: 0.2 });
+        const waterY = -0.02;
+        [
+          { p: [0, waterY, 13], r: [-Math.PI / 2, 0, 0], s: [20, 8] },
+          { p: [0, waterY, -13], r: [-Math.PI / 2, 0, 0], s: [20, 8] },
+          { p: [13, waterY, 0], r: [-Math.PI / 2, 0, 0], s: [8, 20] },
+          { p: [-13, waterY, 0], r: [-Math.PI / 2, 0, 0], s: [8, 20] }
+        ].forEach((cfg) => {
+          const plane = new THREE.Mesh(new THREE.PlaneGeometry(cfg.s[0], cfg.s[1]), waterMat.clone());
+          plane.position.set(cfg.p[0], cfg.p[1], cfg.p[2]);
+          plane.rotation.set(cfg.r[0], cfg.r[1], cfg.r[2]);
+          this.scene.add(plane);
+        });
+      }
+
+      setupUIActions() {
+        document.getElementById("playBtn").addEventListener("click", () => {
+          this.sound.play("button");
+          this.start();
+        });
+        document.getElementById("nextBtn").addEventListener("click", () => {
+          this.sound.play("button");
+          this.levelIndex = (this.levelIndex + 1) % levels.length;
+          localStorage.setItem("bridge_level", String(this.levelIndex));
+          this.resetLevel();
+          this.start();
+        });
+        document.getElementById("retryBtn").addEventListener("click", () => {
+          this.sound.play("button");
+          this.resetLevel();
+          this.start();
+        });
+      }
+
+      buildLevel(level) {
+        this.currentLevel = level;
+        this.clearDynamic();
+
+        const colors = level.colors;
+        this.player = new Player(colors[0], "You");
+        this.player.position.set(-2.4, 0, -7.6);
+        this.scene.add(this.player);
+        this.players.push(this.player);
+
+        this.aiBots = [];
+        for (let i = 0; i < level.aiCount; i++) {
+          const speedVariance = 0.8 + Math.random() * 0.4;
+          const bot = new AI(colors[i + 1], speedVariance * level.aiSpeed, `Bot${i + 1}`);
+          bot.position.set(-3 + i * 2.2, 0, -6.8 + (i % 2 === 0 ? 0.7 : -0.7));
+          this.scene.add(bot);
+          this.aiBots.push(bot);
+          this.players.push(bot);
+        }
+
+        this.stairs = new Map();
+        for (const p of this.players) {
+          const stair = new Stair(p.colorHex, level.stairs);
+          this.scene.add(stair);
+          this.stairs.set(p.colorHex, stair);
+        }
+
+        this.spawnTiles(level.tileCount);
+        this.ui.updateStack(0);
+      }
+
+      spawnTiles(count) {
+        const allColors = this.players.map((p) => p.colorHex);
+        const spacing = 0.9;
+        let created = 0;
+
+        for (let x = -8; x <= 8 && created < count; x += spacing) {
+          for (let z = -2; z <= 8 && created < count; z += spacing) {
+            const color = allColors[Math.floor(Math.random() * allColors.length)];
+            const jitter = new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.45, (Math.random() - 0.5) * 0.2);
+            const pos = new THREE.Vector3(x, 0.45, z).add(jitter);
+            const tile = this.getPooledTile(color, pos);
+            this.tiles.push(tile);
+            this.scene.add(tile);
+            created++;
+          }
+        }
+      }
+
+      getPooledTile(color, position) {
+        const tile = this.tilePool.pop() || new Tile(color, position);
+        tile.reset(position, color);
+        return tile;
+      }
+
+      recycleCollectedTiles() {
+        for (let i = this.tiles.length - 1; i >= 0; i--) {
+          const tile = this.tiles[i];
+          if (tile.collected && !tile.visible) {
+            this.scene.remove(tile);
+            this.tiles.splice(i, 1);
+            this.tilePool.push(tile);
+          }
+        }
+      }
+
+      clearDynamic() {
+        if (this.player) {
+          this.players.forEach((p) => this.disposePlayer(p));
+          this.players = [];
+          this.aiBots = [];
+        }
+
+        this.tiles.forEach((t) => {
+          this.scene.remove(t);
+          this.tilePool.push(t);
+        });
+        this.tiles = [];
+
+        for (const stair of this.stairs.values()) {
+          this.scene.remove(stair);
+          stair.dispose();
+        }
+        this.stairs.clear();
+      }
+
+      disposePlayer(player) {
+        for (const child of player.children) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
+            else child.material.dispose();
+          }
+        }
+        while (player.stack.length) player.removeBlock();
+        this.scene.remove(player);
+      }
+
+      start() {
+        this.state = GAME_STATES.RUNNING;
+        this.ui.showScreen("");
+        this.ui.setHudVisible(true);
+        this.input.setEnabled(true);
+        this.sound.ensureRunning();
+        this.sound.startDrone();
+      }
+
+      win() {
+        if (this.state !== GAME_STATES.RUNNING) return;
+        this.state = GAME_STATES.WIN;
+        this.sound.play("win");
+        this.sound.stopDrone();
+        this.input.setEnabled(false);
+        this.ui.setHudVisible(false);
+        const earned = 12 + this.player.coins;
+        this.coins += earned;
+        localStorage.setItem("bridge_coins", String(this.coins));
+        this.ui.updateCoins(this.coins);
+        this.ui.showWin(earned);
+        this.particles.emit("win", this.currentLevel.finishPosition.clone().add(new THREE.Vector3(0, 1, 0)), 0xffffff);
+      }
+
+      lose() {
+        if (this.state !== GAME_STATES.RUNNING) return;
+        this.state = GAME_STATES.LOSE;
+        this.sound.stopDrone();
+        this.input.setEnabled(false);
+        this.ui.setHudVisible(false);
+        this.ui.showScreen("lose");
+      }
+
+      resetLevel() {
+        this.state = GAME_STATES.READY;
+        this.sound.stopDrone();
+        this.input.reset();
+        this.input.setEnabled(false);
+        this.ui.setHudVisible(false);
+        this.ui.showScreen("start");
+        this.currentLevel = levels[this.levelIndex % levels.length];
+        this.buildLevel(this.currentLevel);
+        this.ui.updateCoins(this.coins);
+      }
+
+      onResize() {
+        this.camera.aspect = window.innerWidth / window.innerHeight;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.input.handleMobileResize();
+      }
+
+      updateCamera(delta) {
+        if (!this.player) return;
+        const camOffset = new THREE.Vector3(0, 7.5, -7.2);
+        const dir = this.player.moveDirection.lengthSq() > 0.01 ? this.player.moveDirection.clone() : new THREE.Vector3(0, 0, 1);
+        const yaw = Math.atan2(dir.x, dir.z);
+        camOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+        const targetPos = this.player.position.clone().add(camOffset);
+        this.camera.position.lerp(targetPos, 1 - Math.exp(-delta * 5));
+        const look = this.player.position.clone().add(new THREE.Vector3(0, 1.6, 2.8));
+        this.camera.lookAt(look);
+      }
+
+      checkCollection(character, isHuman = false) {
+        for (const tile of this.tiles) {
+          if (tile.collected || !tile.visible || tile.colorHex !== character.colorHex) continue;
+          if (character.position.distanceTo(tile.position) < 0.95) {
+            if (character.collect(tile, this.particles, isHuman ? this.sound : null) && isHuman) {
+              this.ui.updateStack(character.getStackCount());
+            }
+          }
+        }
+      }
+
+      tryBuild(character, isHuman = false) {
+        const stair = this.stairs.get(character.colorHex);
+        if (!stair || !character.canBuild()) return;
+        const buildTarget = stair.getBuildTarget();
+        if (character.position.distanceTo(buildTarget) < 1.1) {
+          const placedPos = stair.placePiece();
+          if (placedPos) {
+            character.removeBlock();
+            this.particles.emit("place", placedPos, character.colorHex);
+            if (isHuman) {
+              this.sound.play("place");
+              this.ui.updateStack(character.getStackCount());
+            }
+          }
+        }
+      }
+
+      update(delta) {
+        const elapsed = this.clock.elapsedTime;
+
+        this.tiles.forEach((tile) => tile.animate(elapsed));
+        this.stairs.forEach((stair) => stair.update(delta));
+        this.particles.update(delta);
+
+        if (this.state === GAME_STATES.RUNNING) {
+          this.player.setDirection(this.input.getDirection());
+          this.player.update(delta, this.arenaLimit);
+          this.checkCollection(this.player, true);
+          this.tryBuild(this.player, true);
+
+          this.aiBots.forEach((bot) => {
+            bot.updateAI(delta, this);
+            this.checkCollection(bot, false);
+            if (bot.state === "FINISH" && bot.position.distanceTo(this.currentLevel.finishPosition) < 1.2) {
+              this.lose();
+            }
+          });
+
+          const playerStair = this.stairs.get(this.player.colorHex);
+          const progress = playerStair ? playerStair.steps.filter((s) => s.filled).length / playerStair.stepCount : 0;
+          this.ui.updateProgress(progress);
+
+          if (playerStair && playerStair.isComplete() && this.player.position.distanceTo(this.currentLevel.finishPosition) < 1.25) {
+            this.win();
+          }
+        }
+
+        this.recycleCollectedTiles();
+        this.updateCamera(delta);
+      }
+
+      render() {
+        this.renderer.render(this.scene, this.camera);
+      }
+    }
+
+    const game = new Game(document.getElementById("gameContainer"));
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = Math.min(0.033, game.clock.getDelta());
+      game.update(delta);
+      game.render();
+    }
+
+    animate();
+    })();
+  </script>
+</body>
+</html>
